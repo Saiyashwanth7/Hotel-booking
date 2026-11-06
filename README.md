@@ -1,94 +1,62 @@
-### Hotel Booking Analytics & QA System
-An LLM-powered system that processes hotel booking data, extracts insights, and enables retrieval-augmented question answering (RAG) about the data.
-Features
-•	Data Processing: Clean and preprocess hotel booking data
-•	Analytics & Reporting: 
-o	Revenue trends over time
-o	Cancellation rate analysis
-o	Geographical distribution of bookings
-o	Booking lead time distribution
-o	Additional guest composition analysis
-•	Retrieval-Augmented Question Answering: 
-o	Vector database for efficient similarity search
-o	Natural language Q&A using open-source LLMs
-o	Context-aware responses based on the booking data
-•	RESTful API: 
-o	Analytics endpoint for data visualization
-o	Q&A endpoint for natural language queries
-o	Health check endpoint for system status
-o	Query history tracking
-Setup Instructions
-Prerequisites
-•	Python 3.8+
-•	Virtual environment (recommended)
-•	HuggingFace API token (for RAG system)
-Installation
-1.	Clone the repository:
-2.	git clone https://github.com/yourusername/hotel-booking-analytics.git
-3.	cd hotel-booking-analytics
-4.	Create and activate a virtual environment:
-5.	python -m venv venv
-6.	source venv/bin/activate  # On Windows: venv\Scripts\activate
-7.	Install required packages:
-8.	pip install -r requirements.txt
-9.	Download the dataset:
-10.	mkdir -p data
-11.	# Download the dataset from Kaggle or use the provided one
-12.	# https://www.kaggle.com/jessemostipak/hotel-booking-demand
-13.	# Place it in the data/ directory as hotel_bookings.csv
-14.	Create a .env file with your HuggingFace API token:
-15.	HUGGINGFACE_API_TOKEN=your_token_here
-Running the Application
-1.	Start the API server:
-2.	python main.py
-3.	The API will be available at http://localhost:8000
-API Endpoints
-GET /health
-Check the health status of the system and its components.
-POST /analytics
-Get analytics reports about the hotel booking data.
-Request Body:
-{
-  "filters": {
-    "hotel": "Resort Hotel"  // Optional filters
-  }
-}
-POST /ask
-Ask natural language questions about the booking data.
-Request Body:
-{
-  "question": "Show me total revenue for July 2017."
-}
-GET /query-history
-Retrieve the history of questions asked to the system.
-Sample Test Queries
-Here are some example questions you can ask the system:
-1.	"Show me total revenue for July 2017."
-2.	"Which locations had the highest booking cancellations?"
-3.	"What is the average price of a hotel booking?"
-4.	"What is the cancellation rate for resort hotels?"
-5.	"What's the average lead time for bookings from Portugal?"
-6.	"How does the booking behavior differ between resort hotels and city hotels?"
-7.	"Which month had the highest revenue in 2016?"
-Performance Evaluation
-To evaluate the performance of the system:
-python tests/evaluate_performance.py
-This will test the response time and accuracy of the API endpoints and generate a report.
-Implementation Choices & Challenges
-Vector Database Selection
-FAISS was chosen for its efficiency in similarity search and ease of integration. We normalize vectors for cosine similarity, which works well for semantic search in the RAG system.
-LLM Integration
-We use Mistral 7B via HuggingFace's API for the RAG system. This provides a good balance between performance and accuracy for answering domain-specific questions.
-Challenges
-1.	Data Preprocessing: The hotel booking dataset required significant cleaning, especially for date fields and calculating derived metrics like revenue.
-2.	RAG System Tuning: Finding the right balance between retrieval accuracy and response speed was challenging. We optimized by:
-o	Creating both aggregate (monthly) and individual booking documents
-o	Using a smaller embedding model (MiniLM) for faster vector creation
-o	Implementing background embedding creation during startup
-3.	API Response Time: For heavy operations like analytics generation with plots, we implemented caching mechanisms and optimized data processing.
-Future Improvements
-•	Implement real-time data updates with a proper database backend
-•	Add user authentication for the API
-•	Create a web frontend for interactive visualization
-•	Expand the RAG system with a larger language model for more nuanced answers
-•	Add more comprehensive test cases and continuous integration
+# Hotel Booking Analytics and QA (RAG)
+
+FastAPI service that does two things on the hotel bookings dataset (119,390 rows):
+
+1. `/analytics`: charts and stats (revenue trends, cancellation rate, top countries, lead time, guest composition)
+2. `/ask`: natural language questions answered with a hybrid approach
+
+## How /ask works
+
+1. The question is matched against ~350 summary documents (monthly, yearly, per country, per segment) using TF-IDF retrieval. For better semantic search you can switch to sentence-transformers + FAISS (see below).
+2. Common metrics (revenue for a month, cancellation rate, average lead time, average price, top cancellation countries, best revenue month) are computed exactly with pandas. The response says `"source": "computed"`.
+3. Everything else goes to an LLM (any OpenAI-compatible API, default OpenRouter free models) with the retrieved documents as context. The response says `"source": "rag_llm"`.
+4. If the LLM is unavailable, the retrieved documents are returned with `"source": "retrieval_only"`.
+
+Revenue is ADR x total nights and includes canceled bookings.
+
+## Run locally
+
+```
+python -m venv venv
+venv\Scripts\activate          (Windows)   |   source venv/bin/activate   (Mac/Linux)
+pip install -r requirements.txt
+copy .env.example .env         (then put your API key in .env)
+python main.py
+```
+
+Open http://localhost:8000/docs
+
+Optional transformer retrieval: `pip install -r requirements-transformer.txt` and set `EMBEDDING_BACKEND=transformer` (needs about 1 GB RAM).
+
+## Tests
+
+```
+pytest -q                                   # offline, uses a fake LLM
+python tests/evaluate_performance.py        # against a running server
+```
+
+## Deploy on Render (free)
+
+1. Push this project to a GitHub repo (`.env` is git-ignored, never commit it).
+2. Render dashboard > New > Web Service > connect the repo.
+3. Settings:
+   - Runtime: Python
+   - Build command: `pip install -r requirements.txt`
+   - Start command: `uvicorn src.api:app --host 0.0.0.0 --port $PORT`
+   - Instance type: Free
+4. Environment variables:
+   - `PYTHON_VERSION` = `3.11.9`
+   - `LLM_API_KEY` = your OpenRouter key
+   - `LLM_BASE_URL` = `https://openrouter.ai/api/v1`
+   - `LLM_MODEL` = `openrouter/free`
+5. Deploy, then open `https://<service-name>.onrender.com/docs`.
+
+The free instance sleeps after about 15 minutes without traffic, so the first request after a break takes around a minute.
+A `Dockerfile` and `render.yaml` are included if you prefer those routes.
+
+## Sample requests
+
+```
+curl -X POST http://localhost:8000/ask -H "Content-Type: application/json" -d "{\"question\": \"Show me total revenue for July 2017.\"}"
+curl -X POST http://localhost:8000/analytics -H "Content-Type: application/json" -d "{\"filters\": {\"hotel\": \"Resort Hotel\"}}"
+```

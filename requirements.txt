@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+pandas>=2.0
+numpy
+matplotlib
+seaborn
+python-dotenv
+scikit-learn
+pycountry
+requests
+pytest
+httpx

@@ -1,0 +1,4 @@
+-r requirements.txt
+faiss-cpu
+sentence-transformers
+# also set EMBEDDING_BACKEND=transformer
