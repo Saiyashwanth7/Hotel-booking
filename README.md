@@ -1,4 +1,4 @@
-Hotel Booking Analytics & QA System
+### Hotel Booking Analytics & QA System
 An LLM-powered system that processes hotel booking data, extracts insights, and enables retrieval-augmented question answering (RAG) about the data.
 Features
 •	Data Processing: Clean and preprocess hotel booking data
