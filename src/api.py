@@ -48,7 +48,7 @@ class AnalyticsRequest(BaseModel):
 class QuestionRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=500)
 
-
+@app.head("/")
 @app.get("/")
 def root():
     return {"message": "Hotel Booking Analytics & QA API. See /docs for the interactive API docs."}
